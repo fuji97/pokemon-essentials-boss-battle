@@ -5,7 +5,7 @@
 # Version: 1.0 (1)
 # Date: 03/09/2018
 # Original creation date: 30/01/2017
-# Creator: Fuji97
+# Developer: Fuji97 (https://github.com/fuji97)
 # Original code from Pokémon Cremisi Portals by Hoseki Team
 # All right reserved.
 ################################################################################
