@@ -2,7 +2,7 @@
 # BOSS BATTLE
 # For Pokèmon Essentials v17.2
 # ######
-# Version: 0.3 (3)
+# Version: 0.4 (4)
 # Date: 07/09/2018
 # Developer: Fuji97 (https://github.com/fuji97)
 # Based on original code from Pokémon Xenoverse by WEEDle Team
@@ -17,11 +17,23 @@
 #
 # HP bar height in pixels
 HPBAR_HEIGHT = 6
+# Show difference from starting HP during animation
+SHOW_HP_DIFFERENCE = true
+# Enable if you want to use the same image for every HP bar
+BARS_SAME_COLOR = true
+# HP bars image path
+HP_BARS_PATH = "Graphics/Pictures/BossBattle/boss_hp_single.png"
 #
 # Dots width in pixels
-DOTS_WIDTH = 14
+DOTS_WIDTH = 18
 # Space between dots
 DOTS_SPACE = -2
+# Show difference from starting dots during animation
+SHOW_DOTS_DIFFERENCE = true
+# Enable if you want to use the same image for every dot
+DOTS_SAME_COLOR = true
+# Dots image path
+DOTS_PATH = "Graphics/Pictures/BossBattle/hp_dot_single.png"
 #
 ################################################################################
 
@@ -135,8 +147,8 @@ class PokemonDataBox < SpriteWrapper
 	alias :initializeBoss :initialize
 	# Use boss_hp instead of overlay_hp if the pokemon is a boss
 	def initialize(battler,doublebattle,viewport=nil)
-		@hpdot = Bitmap.new("Graphics/Pictures/BossBattle/hp_dot")
-		@hpbarBoss = Bitmap.new("Graphics/Pictures/BossBattle/boss_hp")
+		@hpdot = Bitmap.new(DOTS_PATH)
+		@hpbarBoss = Bitmap.new(HP_BARS_PATH)
 		initializeBoss(battler,doublebattle,viewport)
 	end
 	
@@ -208,26 +220,48 @@ class PokemonDataBox < SpriteWrapper
 			
 			currentBar = (self.hp.to_f / (@battler.totalhp / @battler.hpMultiplier)).ceil - 1
 			currentBar = currentBar < 0 ? 0 : currentBar
-			# Draw next bar in BG
+			startBar = (@starthp.to_f / (@battler.totalhp / @battler.hpMultiplier)).ceil - 1
+			startBar = startBar < 0 ? 0 : startBar
+			Log.v("BOSS", "StartBar: #{startBar} (Start HP: #{@starthp})")
+			
+			# Draw next bar in background
 			#Log.v("BOSS","Draw bar n^ #{currentBar-1} [#{@battler.hp}/#{@battler.totalhp / @battler.hpMultiplier}] [#{@battler.totalhp} - #{@battler.hpMultiplier}]")
 			if currentBar > 0
 				self.bitmap.blt(@spritebaseX+102,40,@hpbarBoss,
-					Rect.new(0,(currentBar-1)*HPBAR_HEIGHT,@hpbarBoss.width,HPBAR_HEIGHT),
-					150)
+					Rect.new(0,(BARS_SAME_COLOR ? 1 : (currentBar-1))*HPBAR_HEIGHT,
+					@hpbarBoss.width,HPBAR_HEIGHT),150)
 			end	
-			#~ if @animatingHP && self.hp>0   # fill with black (shows what the HP used to be)
-				#~ self.bitmap.fill_rect(@spritebaseX+102,40,
-					 #~ @starthp*@hpbar.bitmap.width/@battler.totalhp,@hpbar.bitmap.height/3,Color.new(0,0,0,100))
-			#~ end
+			
+			# Draw the damage bar
+			if SHOW_HP_DIFFERENCE && @animatingHP && @starthp > self.hp && self.hp>0   
+				# Damage bar is the last bar in image
+				self.bitmap.blt(@spritebaseX+102,40,@hpbarBoss,
+					Rect.new(0,@hpbarBoss.height-HPBAR_HEIGHT,
+						(currentBar < startBar ? @hpbarBoss.width : gaugePercentage(@starthp) * @hpbarBoss.width),
+						HPBAR_HEIGHT))
+			end
+			
 			Log.v("BOSS","hpgauge = #{hpgauge}")
 			self.bitmap.blt(@spritebaseX+102,40,@hpbarBoss,
-				Rect.new(0,currentBar*HPBAR_HEIGHT,hpgauge,HPBAR_HEIGHT))
+				Rect.new(0,(BARS_SAME_COLOR ? 0 : currentBar)*HPBAR_HEIGHT,hpgauge,HPBAR_HEIGHT))
 			
 			# Draw dots
 			for i in 0..@battler.hpMultiplier-2
-				Log.d("BOSS", "Draw dot number #{i}/#{@battler.hpMultiplier-2} [X: #{@spritebaseX+102+i*DOTS_WIDTH}]")
-				self.bitmap.blt(@spritebaseX+72+i*(DOTS_WIDTH+DOTS_SPACE),48,@hpdot,
-					i < currentBar ? Rect.new((i+1)*DOTS_WIDTH,0,DOTS_WIDTH,@hpdot.height) : Rect.new(0,0,DOTS_WIDTH,@hpdot.height))
+				#Log.v("BOSS", "Draw dot number #{i}/#{@battler.hpMultiplier-2} [X: #{@spritebaseX+102+i*DOTS_WIDTH}]")
+				# Choose the correct dot
+				if i < currentBar
+					if DOTS_SAME_COLOR
+						rect = Rect.new(2*DOTS_WIDTH,0,DOTS_WIDTH,@hpdot.height)
+					else
+						rect = Rect.new((i+1)*DOTS_WIDTH,0,DOTS_WIDTH,@hpdot.height)
+					end
+				elsif SHOW_DOTS_DIFFERENCE && i < startBar && @animatingHP && self.hp>0
+					rect = Rect.new(1*DOTS_WIDTH,0,DOTS_WIDTH,@hpdot.height)
+				else
+					rect = Rect.new(0,0,DOTS_WIDTH,@hpdot.height)
+				end
+				
+				self.bitmap.blt(@spritebaseX+72+i*(DOTS_WIDTH+DOTS_SPACE),50,@hpdot,rect)
 			end
 			
 		else
@@ -267,10 +301,10 @@ class PokemonDataBox < SpriteWrapper
     if @animatingHP
 			if @battler.boss
 				if @currenthp<@endhp
-					@currenthp += [1,(@battler.totalhp/(96*@battler.hpMultiplier*2) / @battler.hpMultiplier).floor].max
+					@currenthp += [1,(@battler.totalhp/(96*@battler.hpMultiplier*4) / @battler.hpMultiplier).floor].max
 					@currenthp = @endhp if @currenthp>@endhp
 				elsif @currenthp>@endhp
-					@currenthp -= [1,(@battler.totalhp/(96*@battler.hpMultiplier*2) / @battler.hpMultiplier).floor].max
+					@currenthp -= [1,(@battler.totalhp/(96*@battler.hpMultiplier*4) / @battler.hpMultiplier).floor].max
 					@currenthp = @endhp if @currenthp<@endhp
 				end
 			else
@@ -368,4 +402,5 @@ Events.onWildPokemonCreate += proc {|sender,e|
 		Log.d("BOSS","HP totali: #{pokemon.totalhp}")
 		$BossMultiplier = 0
   end
+
 }
