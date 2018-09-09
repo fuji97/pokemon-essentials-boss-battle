@@ -1,9 +1,9 @@
 ################################################################################
-# BOSS BATTLE FADING
+# POKÉMON MYSTERY DUNGEON ANIMATION
 # For Pokèmon Essentials v17.2
 # ######
-# Version: 0.1 (1)
-# Date: 07/09/2018
+# Version: 0.1 (4)
+# Date: 09/09/2018
 # Developer: Fuji97 (https://github.com/fuji97)
 # All rights reserved.
 ################################################################################
@@ -14,6 +14,9 @@
 # # # EAM_Core
 # Fuji's Utilities
 # Advanced Log
+#
+# [OPTIONAL]
+# BossBattle_Core
 ################################################################################
 
 ################################### SETTINGS ###################################
@@ -35,7 +38,7 @@ LINE_OVERLAP = 2
 #
 ################################################################################
 
-module BossBattle_Fading
+module PMD_Animation
 	@@counter = 0
 	@@flash = nil
 	@@callback = nil
@@ -98,7 +101,7 @@ module BossBattle_Fading
 		@@flash.update
 		if async
 			if @@counter != 0
-				raise "[BossBattle_Fading] Can't launch another hit when the previous is still executing."
+				raise "[PMD_Animation] Can't launch another hit when the previous is still executing."
 			end
 			
 			@@callback = callback
@@ -129,7 +132,7 @@ module BossBattle_Fading
 		@@flash.update
 		if async
 			if @@counter != 0
-				raise "[BossBattle_Fading] Can't launch another hit when the previous is still executing."
+				raise "[PMD_Animation] Can't launch another hit when the previous is still executing."
 			end
 			
 			@@callback = callback
@@ -229,9 +232,6 @@ module BossBattle_Fading
 		
 		whiteScreen.fade(255, WHITE_SCREEN_FADE_DURATION)
 		
-		#composition.fade(255, STARTING_ANIMATION_DURATION, :ease_in_quad)
-		#composition.zoom(1.0, 1.0, STARTING_ANIMATION_DURATION, :ease_in_quad)
-		
 		# Start loop
 		framesTimer = STARTING_ANIMATION_DURATION - WHITE_SCREEN_FADE_DURATION
 		while sprites[0].isAnimating?
@@ -248,7 +248,6 @@ module BossBattle_Fading
 			end
 		end
 		
-		
 		sprites.each {|sprite| sprite.opacity = 0; sprite.dispose}
 		
 		yield
@@ -256,5 +255,49 @@ module BossBattle_Fading
 		whiteScreen.opacity = 0
 		whiteScreen.dispose
 	end
-	
+end
+
+# HP Multiplier works only if BossBattle is included
+def pbFastBattle(species,level,variable=nil,canescape=true,canlose=false, hpmultiplier=1)
+  if (Input.press?(Input::CTRL) && $DEBUG) || $Trainer.pokemonCount==0
+    if $Trainer.pokemonCount>0
+      Kernel.pbMessage(_INTL("SKIPPING BATTLE..."))
+    end
+    pbSet(variable,1)
+    $PokemonGlobal.nextBattleBGM  = nil
+    $PokemonGlobal.nextBattleME   = nil
+    $PokemonGlobal.nextBattleBack = nil
+    return true
+  end
+  if species.is_a?(String) || species.is_a?(Symbol)
+    species = getID(PBSpecies,species)
+  end
+  handled = [nil]
+  Events.onWildBattleOverride.trigger(nil,species,level,handled)
+  return handled[0] if handled[0]!=nil
+  currentlevels = []
+  for i in $Trainer.party
+    currentlevels.push(i.level)
+  end
+  genwildpoke = pbGenerateWildPokemon(species,level)
+  Events.onStartBattle.trigger(nil,genwildpoke)
+	if hpmultiplier > 1
+		Log.d("FASTBATTLE", "Boss with hp Multiplier: #{hpmultiplier}")
+		# Set boss only if the BossBattle is included
+		genwildpoke.setBoss(hpmultiplier) if defined? genwildpoke.setBoss()
+	end
+  scene = pbNewBattleScene
+  battle = PokeBattle_Battle.new(scene,$Trainer.party,[genwildpoke],$Trainer,nil)
+  battle.internalbattle = true
+  battle.cantescape     = !canescape
+  pbPrepareBattle(battle)
+  decision = 0
+    pbSceneStandby {
+      decision = battle.pbStartBattle(canlose)
+    }
+    pbAfterBattle(decision,canlose)
+  Input.update
+  pbSet(variable,decision)
+  Events.onWildBattleEnd.trigger(nil,species,level,decision)
+  return (decision!=2)
 end
